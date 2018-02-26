@@ -4,6 +4,8 @@ data {
 
         int NS;
 
+        int NT_all[NS];
+
 
         int r[NS,NT];
 
@@ -66,7 +68,7 @@ model {
                 }
 
 
-                for (t in 1:NT) {
+                for (t in 1:NT_all[s]) {
 
                         c[s,t] ~ bernoulli_logit(betas[s]  * (q[2] - q[1]));
 
