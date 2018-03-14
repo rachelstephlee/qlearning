@@ -80,6 +80,8 @@ model {
 
 }
 
+/*
+// take out generated quantities to speed up. I calculate the quantities per sample in python and not in Stan
 generated quantities {
 
     real delta[NS, NT];
@@ -124,5 +126,6 @@ generated quantities {
 
     }
 }
+*/
     
 
