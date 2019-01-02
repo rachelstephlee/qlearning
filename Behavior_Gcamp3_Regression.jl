@@ -69,7 +69,6 @@ using Distributions
 using Statistics
 using MixedModels
 using StatsBase
-using DataFrames
 
 src = "DMS_CB"
 Q_vals = "Q_ch_diff"
@@ -120,8 +119,27 @@ end
 
 df_fits.timelocked = timelock
 df_fits.RecordLoc = src
-CSV.write("data/" * src * "/Julia_lever_np.csv", df_fits)
+# CSV.write("data/" * src * "/Julia_lever_np.csv", df_fits) # now go correct first
 
 ########################## PLOT TO CHECK ##################################
 using Plots
 plot([coef[1] for coef in coefs])
+
+########################## P-VALUE CORRECTION ##################################
+
+using MultipleTesting
+# using CSV
+# using DataFrames
+src = "DMS"
+df_fits = CSV.read("data/" * src * "/Julia_lever_dir2.csv")
+
+
+
+for var = unique(df_fits[:Variable])
+    println(var)
+    pvals = convert(Array{Float64,1}, df_fits[df_fits[:Variable] .== var, :Pval])
+    df_fits[df_fits[:Variable] .== var, :Pval] = adjust(PValues(pvals),MultipleTesting.BenjaminiHochberg())
+
+end
+
+CSV.write("data/" * src * "/Julia_lever_dir2_corrected.csv", df_fits)
