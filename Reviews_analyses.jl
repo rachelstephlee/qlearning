@@ -6,6 +6,7 @@ using Statistics
 using MixedModels
 using StatsBase
 using DataFrames
+using Plots
 
 function normalize(x, mu, std)
     return (x .- mu) ./ std
@@ -114,38 +115,89 @@ CSV.write("data/" * RECORDLOC * "/df_" * BLOCK * "_reg_corrected.csv", df_fits)
 #################################
 # LATENCY
 #################################
-# take mouse 4 out
+
+function split_trials(df_src, recordloc)
+    df_all =  df_src[(df_src[:RecordLoc] .== recordloc), :]
+    df_stay = df_src[(df_src[:RecordLoc].== recordloc) .& (df_src[:StayVSLeave] .== "stay"), :]
+    df_leave = df_src[(df_src[:RecordLoc].== recordloc) .& (df_src[:StayVSLeave] .== "leave"), :]
+
+    return (df_all, df_stay, df_leave)
+end
+
 
 # Lmer(latency ~ 1 + Qchdiff + presLat + (1 + Qchdiff + Preslat | mouseid), …)
+Q_VALS_TYPE = :Q_ch_diff
+df = CSV.read("data/latency_qvals_gcamp.csv")
+df = normalize_q_vals(df, Q_VALS_TYPE)
+df[:StayVSLeave] = coalesce.(df[:StayVSLeave], "na")
 
-df = CSV.read("data/latency_q_val_gcamp.csv")
-df = normalize_q_vals(df)
-df[:l_Latency_press] = log.(df[:Latency_press])
+histogram(df[:Latency_prez])
+histogram(df[:Latency_choice])
+histogram(df[:Latency_np])
+#################################
+# LATENCY: choice
+#################################
+
+df[:l_Latency_prez] = log.(df[:Latency_prez])
 df[:l_Latency_choice] = log.(df[:Latency_choice])
 
 #drop missing values
-df[:StayVSLeave] = coalesce.(df[:StayVSLeave], "na")
+
 
 
 # Lmer(latency ~ 1 + Qchdiff + presLat + (1 + Qchdiff + Preslat | mouseid), …)
-df_DMS =  df[(df[:StayVSLeave] .== "stay"), :]
-df_DMS_stay = df[(df[:RecordLoc].== "DMS") .& (df[:StayVSLeave] .== "stay"), :]
-df_DMS_leave = df[(df[:RecordLoc].== "DMS") .& (df[:StayVSLeave] .== "leave"), :]
+(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df, "DMS")
 
+formula_i = @eval @formula(l_Latency_choice ~ 1 + Q_ch_diff + l_Latency_prez + (1 + Q_ch_diff + l_Latency_prez | MouseID))
 
-formula_i = @eval @formula(l_Latency_choice ~ 1 + Q_ch_diff + l_Latency_press + (1 + Q_ch_diff + l_Latency_press | MouseID))
-
+latency_fits = fit(LinearMixedModel, formula_i, df_DMS)
 latency_fits_stay = fit(LinearMixedModel, formula_i, df_DMS_stay)
 latency_fits_leave = fit(LinearMixedModel, formula_i, df_DMS_leave)
 
 
-df_DMS_CB = df[df[:RecordLoc].== "DMS_CB", :]
-df_DMS_CB_stay = df[(df[:RecordLoc].== "DMS_CB") .& (df[:StayVSLeave] .== "stay"), :]
-df_DMS_CB_leave = df[(df[:RecordLoc].== "DMS_CB") .& (df[:StayVSLeave] .== "leave"), :]
+(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df, "DMS_CB")
 
-
-formula_i = @eval @formula(l_Latency_choice ~ 1 + Q_ch_diff + l_Latency_press + (1 + Q_ch_diff + l_Latency_press | MouseID))
 latency_fits = fit(LinearMixedModel, formula_i, df_DMS_CB)
-
 latency_fits_stay = fit(LinearMixedModel, formula_i, df_DMS_CB_stay)
 latency_fits_leave = fit(LinearMixedModel, formula_i, df_DMS_CB_leave)
+
+#############
+# LATENCY: Nosepoke latency
+#############
+
+df[:l_Latency_np] = log.(df[:Latency_np])
+formula_np = @eval @formula(Latency_np ~ 1 + Q_ch_diff + (1 + Q_ch_diff  | MouseID))
+println("can't use log of latency nosepoke because there are trials when trial_start and nosepoke occur at the same time.")
+(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df, "DMS")
+latency_fits = fit(LinearMixedModel, formula_np, df_DMS)
+latency_fits_stay = fit(LinearMixedModel, formula_np, df_DMS_stay)
+latency_fits_leave = fit(LinearMixedModel, formula_np, df_DMS_leave)
+
+(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df, "DMS_CB")
+latency_fits_CB = fit(LinearMixedModel, formula_np, df_DMS_CB)
+latency_fits_stay_CB = fit(LinearMixedModel, formula_np, df_DMS_CB_stay)
+latency_fits_leave_CB = fit(LinearMixedModel, formula_np, df_DMS_CB_leave)
+
+
+#############
+# LATENCY: Only look at Latency(lever_presentation) < 0.3 seconds
+#############
+
+
+
+df_short = df[df[:Latency_prez] .< 0.3, :] # this is just 35% of the data
+df_short[:l_Latency_np_exit_to_choice] = log.(df_short[:Latency_prez] + df_short[:Latency_choice])
+
+(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df_short, "DMS")
+
+formula_i = @eval @formula(l_Latency_np_exit_to_choice ~ 1 + Q_ch_diff + (1 + Q_ch_diff  | MouseID))
+
+latency_fits = fit(LinearMixedModel, formula_i, df_DMS)
+latency_fits_stay = fit(LinearMixedModel, formula_i, df_DMS_stay)
+latency_fits_leave = fit(LinearMixedModel, formula_i, df_DMS_leave)
+
+(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df_short, "DMS_CB")
+
+latency_fits_CB = fit(LinearMixedModel, formula_i, df_DMS_CB)
+latency_fits_stay_CB = fit(LinearMixedModel, formula_i, df_DMS_CB_stay)
+latency_fits_leave_CB = fit(LinearMixedModel, formula_i, df_DMS_CB_leave)
