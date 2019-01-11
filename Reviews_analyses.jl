@@ -31,7 +31,7 @@ end
 ############################################
 
 
-RECORDLOC = "DMS"
+RECORDLOC = "DMS_CB"
 BLOCK = "late"   # early or late
 Q_VALS_TYPE = :Q_ch_diff
 TIMELOCK = :g_lp
@@ -42,6 +42,7 @@ df_src = CSV.read("data/" * RECORDLOC * "/df_" * BLOCK * ".csv")
 ##### prep for regression #####
 # formats the vector so that it's floats and not strings (for the gcamp)
 format_vec = str_vec->[parse(Float64, ss) for ss in split(str_vec[2:(end-1)])]
+
 
 df_src[TIMELOCK] = format_vec.(df_src[TIMELOCK])
 df_src = normalize_q_vals(df_src, Q_VALS_TYPE)
@@ -89,15 +90,13 @@ for i in 1:45
    append!(df_fits, df_i)
 end
 
-df_fits = CSV.read("data/" * RECORDLOC * "/df_" * BLOCK * "_reg.csv")
 
 ### correcting p-values
 
 using MultipleTesting
 
 
-RECORDLOC = "DMS"
-BLOCK = "early"
+
 
 for var = unique(df_fits[:Variable])
     println(var)
@@ -166,17 +165,31 @@ latency_fits_leave = fit(LinearMixedModel, formula_i, df_DMS_CB_leave)
 #############
 
 df[:l_Latency_np] = log.(df[:Latency_np])
+# df[:Reward_last] = coalesce.(df[:Reward_last], "na") shoulnd't use this for below
+df_r = df[df[:Reward_last] .== 1.0,:]
 formula_np = @eval @formula(Latency_np ~ 1 + Q_ch_diff + (1 + Q_ch_diff  | MouseID))
 println("can't use log of latency nosepoke because there are trials when trial_start and nosepoke occur at the same time.")
-(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df, "DMS")
+
+(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df_r, "DMS")
 latency_fits = fit(LinearMixedModel, formula_np, df_DMS)
 latency_fits_stay = fit(LinearMixedModel, formula_np, df_DMS_stay)
 latency_fits_leave = fit(LinearMixedModel, formula_np, df_DMS_leave)
 
-(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df, "DMS_CB")
+(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df_r, "DMS_CB")
 latency_fits_CB = fit(LinearMixedModel, formula_np, df_DMS_CB)
 latency_fits_stay_CB = fit(LinearMixedModel, formula_np, df_DMS_CB_stay)
 latency_fits_leave_CB = fit(LinearMixedModel, formula_np, df_DMS_CB_leave)
+
+
+# using previous reward
+df_prev_r = dropmissing(df, :Reward_last)
+(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df_prev_r, "DMS")
+
+formula_np_prev_r = @eval @formula(Latency_np ~ 1 + Reward_last + (1 + Reward_last  | MouseID))
+
+latency_fits = fit(LinearMixedModel, formula_np_prev_r, df_DMS)
+latency_fits_stay = fit(LinearMixedModel, formula_np_prev_r, df_DMS_stay)
+latency_fits_leave = fit(LinearMixedModel, formula_np_prev_r, df_DMS_leave)
 
 
 #############
