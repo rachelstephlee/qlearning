@@ -68,7 +68,7 @@ df_fits = DataFrame(Estimate = Float64[], StdError = Float64[], Pval = Float64[]
                        Time = Float64[], Timelock = String[], RecordLoc = String[])
 for i in 1:45
    lhs = Symbol("x", i)
-   formula_i = @eval @formula($lhs ~ 1 + Action_float + $Q_VALS_TYPE + Interact + (1 + Action_float + Q_ch_diff + Interact | MouseID))
+   formula_i = @eval @formula($lhs ~ 1 + Action_float + $Q_VALS_TYPE + Interact + (1 + Action_float + $Q_VALS_TYPE + Interact | MouseID))
    fits_i = fit(LinearMixedModel, formula_i, df_reg)
    idx = 1 + (i - 1) * 4: 1 + (i - 1) * 4 + 3
    co = coef(fits_i)

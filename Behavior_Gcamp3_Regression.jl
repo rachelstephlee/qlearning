@@ -1,11 +1,39 @@
 ########################## IMPORTS ##################################
-using Pandas
 using MixedModels
-using Pkg
+using CSV
+using Distributions
+using Statistics
+using StatsBase
+
+# functions for setting up data
+
+function normalize(x, mu, std)
+    return (x .- mu) ./ std
+end
+
+# normalizes the Q vals, default is choice difference
+function normalize_q_vals(df, q_val)
+    for mouse_id in unique(df[:MouseID])
+
+        mice_q = copy(values(df[df[:MouseID] .== mouse_id,q_val]));
+        mice_mu = mean(mice_q[.!isnan.(mice_q)]);
+        mice_std = std(mice_q[.!isnan.(mice_q)]);
+
+        df[df[:MouseID] .== mouse_id,:Q_ch_diff] = normalize(mice_q, mice_mu, mice_std)
+
+    end
+    return df
+
+end
+
+format_vec = str_vec->[parse(Float64, ss) for ss in split(str_vec[2:(end-1)])]
+
+
+########################## IMPORT DATA ##################################
 
 src = "DMS_CB"
-Q_vals = "Q_ch_diff"
-timelock = "g_np"
+Q_VALS_TYPE = :Q_ch_diff
+TIMELOCK = :g_lp
 
 # import data
 
@@ -16,66 +44,30 @@ df_trials = read_csv("data/int_pc_qvals.csv", index_col = 0)
 
 
 # update the gcamp values from strings --> arrays of floats
-df_src = df_corr_all
-
-format_vec = str_vec->[parse(Float64, ss) for ss in split(str_vec[2:(end-1)])]
-df_src["g_np"] = format_vec.(df_src["g_np"])
-df_src["g_lp"] = format_vec.(df_src["g_lp"])
-df_src["g_choice"] = format_vec.(df_src["g_choice"])
-df_src["g_reward"] = format_vec.(df_src["g_reward"])
-
-
-# df_corr = df_src[df_src["RecordLoc"] == "DMS"]
-df_corr = reset_index(df_src[df_src["RecordLoc"] == src])
+df_src = reset_index(df_src[df_src["RecordLoc"] == src])
 # df_corr = pd.DataFrame(df_corr_all[df_corr_all['RecordLoc'] == 'DMS_CB']).reset_index()
 
-########################## NORMALIZE ##################################
+########################## PREPARE REGRESSION ##################################
 
-function normalize(x, mu, std)
-    return (x .- mu) ./ std
+df_src[TIMELOCK] = format_vec.(df_src[TIMELOCK])
+df_src = normalize_q_vals(df_src, Q_VALS_TYPE)
+
+
+df_reg = DataFrame(df_src[TIMELOCK][1]')
+for x in df_src[TIMELOCK][2:end]
+    push!(df_reg, Array(values(x)'))
 end
 
-println("Using Q_vals: "* Q_vals)
+# add relevant variables for regression
+df_reg[:Action] = df_src[:Action]
+df_reg[Q_VALS_TYPE] = df_src[Q_VALS_TYPE]
+df_reg[:MouseID] = df_src[:MouseID]
 
+Action_float = ones(Float64, length(df_reg.Action))
+Action_float[df_reg.Action .== "Ips"] .= 0
+df_reg.Action_float = Action_float
+df_reg.Interact = df_reg[:Action_float] .* df_reg[Q_VALS_TYPE]
 
-for mouse_id in unique(df_corr["MouseID"])
-
-    mice_q = copy(values(df_corr[df_corr["MouseID"] == mouse_id][Q_vals]));
-    mice_mu = mean(mice_q[.!isnan.(mice_q)]);
-    mice_std = std(mice_q[.!isnan.(mice_q)]);
-
-    loc(df_corr)[df_corr["MouseID"] == mouse_id, Q_vals] = normalize(mice_q, mice_mu, mice_std)
-
-end
-
-
-########################## PREP FOR REGRESSION ##################################
-
-
-println("Using Timelocked GCaMP6f: " * string(timelock))
-df_corr_r = drop(df_corr, ["g_np", "g_lp", "g_choice", "g_reward", "Stay/Leave"], axis = 1)
-
-gcamp_temp = DataFrame([values(x) for x in df_corr[timelock]], columns = ["G" * string(x) for x in 1:45]) #update
-
-
-df_gcamp_reg = dropna(join(df_corr_r, gcamp_temp))
-
-to_csv(df_gcamp_reg, "df_gcamp_reg_np_cb" * ".csv")
-
-########################## RESTART JULIA: REGRESSION SET UP ##################################
-
-using CSV
-using Distributions
-using Statistics
-using MixedModels
-using StatsBase
-
-src = "DMS_CB"
-Q_vals = "Q_ch_diff"
-timelock = "g_np"
-
-
-df = CSV.read("df_gcamp_reg_np_cb" * ".csv")
 
 ########################## REGRESSION ##################################
 
@@ -130,8 +122,6 @@ plot([coef[1] for coef in coefs])
 using MultipleTesting
 # using CSV
 # using DataFrames
-src = "DMS"
-df_fits = CSV.read("data/" * src * "/Julia_lever_dir2.csv")
 
 
 
