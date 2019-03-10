@@ -114,17 +114,10 @@ for i in 1:45
    append!(df_fits, df_i)
 end
 
-df_fits = CSV.read("data/" * RECORDLOC * "/df_" * BLOCK * "_reg.csv")
 
 ### correcting p-values
 
-
-
-RECORDLOC = "DMS"
-BLOCK = "early"
-
-
-
+df_fits = correct_pvals(df_fits)
 
 
 #### saving
@@ -170,7 +163,7 @@ RECORDLOC = "DMS"
 Q_VALS_TYPE = :Q_ch_diff
 TIMELOCK = :g_lp
 
-df_corr_all = CSV.read("data/int_pc_qvals_gcamp_dms (1).csv", index_col = 0) # .dropna(subset=['Q_dir_diff'])
+df_corr_all = CSV.read("data/int_pc_qvals_gcamp_dms.csv", index_col = 0) # .dropna(subset=['Q_dir_diff'])
 
 
 
@@ -282,95 +275,3 @@ end
 df_fits = correct_pvals(df_fits)
 
 CSV.write("data/" * RECORDLOC * "/Julia_lever_latency_corrected_CONTRA.csv", df_fits)
-
-
-#################################
-# LATENCY: choice
-#################################
-
-# Lmer(latency ~ 1 + Qchdiff + presLat + (1 + Qchdiff + Preslat | mouseid), …)
-Q_VALS_TYPE = :Q_ch_diff
-df = CSV.read("data/latency_qvals_gcamp.csv")
-df = normalize_q_vals(df, Q_VALS_TYPE)
-df[:StayVSLeave] = coalesce.(df[:StayVSLeave], "na")
-
-histogram(df[:Latency_prez])
-histogram(df[:Latency_choice])
-histogram(df[:Latency_np])
-
-
-df[:l_Latency_prez] = log.(df[:Latency_prez])
-df[:l_Latency_choice] = log.(df[:Latency_choice])
-
-#drop latency of leve presentation = 0
-
-df = df[df[:Latency_prez] .> 0, :]
-
-
-df_fits = DataFrame(Estimate = Float64[], StdError = Float64[], Pval = Float64[], Variable = String[],
-                       RecordLoc = String[], StayVSLeave = String[])
-
-
-
-# Lmer(latency ~ 1 + Qchdiff + presLat + (1 + Qchdiff + Preslat | mouseid), …)
-
-formula_i = @eval @formula(l_Latency_choice ~ 1 + Q_ch_diff + l_Latency_prez + (1 + Q_ch_diff + l_Latency_prez | MouseID))
-variables = ["Intercept", "Q_ch_diff", "l_Latency_presentation"]
-
-for (df, cut) in zip(split_trials(df, "DMS"), ["All", "Stay", "Leave"])
-    fits = fit(LinearMixedModel, formula_i, df)
-    append!(df_fits, pull_regression_coefs(df_fits , fits, "DMS", cut, variables))
-end
-
-
-
-
-for (df, cut) in zip(split_trials(df, "DMS_CB"), ["All", "Stay", "Leave"])
-    fits = fit(LinearMixedModel, formula_i, df)
-    append!(df_fits, pull_regression_coefs(df_fits , fits, "DMS_CB", cut, variables))
-end
-
-
-CSV.write("data/latency_regressions.csv", df_fits)
-
-
-#############
-# LATENCY: Nosepoke latency
-#############
-
-df[:l_Latency_np] = log.(df[:Latency_np])
-formula_np = @eval @formula(Latency_np ~ 1 + Q_ch_diff + (1 + Q_ch_diff  | MouseID))
-println("can't use log of latency nosepoke because there are trials when trial_start and nosepoke occur at the same time.")
-(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df, "DMS")
-latency_fits = fit(LinearMixedModel, formula_np, df_DMS)
-latency_fits_stay = fit(LinearMixedModel, formula_np, df_DMS_stay)
-latency_fits_leave = fit(LinearMixedModel, formula_np, df_DMS_leave)
-
-(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df, "DMS_CB")
-latency_fits_CB = fit(LinearMixedModel, formula_np, df_DMS_CB)
-latency_fits_stay_CB = fit(LinearMixedModel, formula_np, df_DMS_CB_stay)
-latency_fits_leave_CB = fit(LinearMixedModel, formula_np, df_DMS_CB_leave)
-
-
-#############
-# LATENCY: Only look at Latency(lever_presentation) < 0.3 seconds
-#############
-
-
-
-df_short = df[df[:Latency_prez] .< 0.3, :] # this is just 35% of the data
-df_short[:l_Latency_np_exit_to_choice] = log.(df_short[:Latency_prez] + df_short[:Latency_choice])
-
-(df_DMS, df_DMS_stay, df_DMS_leave) = split_trials(df_short, "DMS")
-
-formula_i = @eval @formula(l_Latency_np_exit_to_choice ~ 1 + Q_ch_diff + (1 + Q_ch_diff  | MouseID))
-
-latency_fits = fit(LinearMixedModel, formula_i, df_DMS)
-latency_fits_stay = fit(LinearMixedModel, formula_i, df_DMS_stay)
-latency_fits_leave = fit(LinearMixedModel, formula_i, df_DMS_leave)
-
-(df_DMS_CB, df_DMS_CB_stay, df_DMS_CB_leave) = split_trials(df_short, "DMS_CB")
-
-latency_fits_CB = fit(LinearMixedModel, formula_i, df_DMS_CB)
-latency_fits_stay_CB = fit(LinearMixedModel, formula_i, df_DMS_CB_stay)
-latency_fits_leave_CB = fit(LinearMixedModel, formula_i, df_DMS_CB_leave)
