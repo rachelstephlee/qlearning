@@ -44,6 +44,14 @@ model {
         betam ~ normal(0,2);
 
         alpham ~ normal(0,2);
+        
+        staym ~ normal(0,2);
+// not the elife version, but corrected accordingly. 
+        betasd ~ normal(0,2);
+
+        alphasd ~ normal(0,2);
+        
+        staysd ~ normal(0,2);
 
 
 
